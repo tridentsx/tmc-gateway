@@ -57,12 +57,18 @@ PCB has all 93 footprints placed but is **not yet routed**.
 ## Software
 
 ```text
-gpib/           the Instrument abstraction every front end drives (no
-                 firmware, no bus driver -- just the interface)
-hislipfront/     adapts gpib.Instrument to tridentsx/hislip's server.Device
-usbtmcfront/     adapts gpib.Instrument to USBTMC/USB488 Bulk-OUT messages
-cmd/tinygocheck/ not firmware -- exists so `just tinygo` has a real main
-                 package to build and link, exercising the above for real
+gpib/            the Instrument abstraction every front end drives (no
+                  firmware, no bus driver -- just the interface)
+hislipfront/      adapts gpib.Instrument to tridentsx/hislip's server.Device
+usbtmcfront/      adapts gpib.Instrument to USBTMC/USB488 Bulk-OUT messages
+usbep/            portable, unit-tested USB packet reassembly (host->device)
+                  and chunking (device->host) usbtmcfront's messages ride on
+cmd/firmware/     the real (skeleton) RP2354A firmware entry point --
+                  tinygo-only, gated by the "tinygo" build tag
+cmd/tinygocheck/  not firmware -- exists so `just tinygo` has a real main
+                  package to build and link, exercising gpib/hislipfront/
+                  usbtmcfront together under mainline go's dependency
+                  graph but a real tinygo build
 ```
 
 `gpib.Instrument` is deliberately not a copy of `hislip/server.Device`,
@@ -81,9 +87,20 @@ actually received.
 | `gpib.Instrument` abstraction | Defined |
 | `hislipfront` (HiSLIP → `gpib.Instrument`) | Implemented, unit-tested |
 | `usbtmcfront` (USBTMC/USB488 → `gpib.Instrument`) | Core Bulk-OUT dispatch implemented, unit-tested — see scope below |
+| `usbep` (USB packet reassembly/chunking) | Implemented, unit-tested — real edge cases (exact-multiple-of-packet-size, empty message, byte-at-a-time feed) |
+| `cmd/firmware` (real USB descriptor + endpoint wiring) | Skeleton exists and **actually builds**: `tinygo build -target=pico2` produces a real, well-formed flashable UF2. Backed by a stub `gpib.Instrument` — no real GPIB bus driver yet. **Not run on any real hardware or against a real USB host.** |
 | GPIB bus driver (the concrete `gpib.Instrument`) | Not started |
 | Raw SCPI front end | Not started |
-| TinyGo build verification | **Done for real**: `tinygo build -target=pico2` (0.42.0) produces a real linked ARM ELF from `cmd/tinygocheck`, exercising `gpib`, `hislipfront`, and `usbtmcfront` together — not yet run on real hardware |
+
+Real, load-bearing constraints found by reading TinyGo 0.42.0's actual
+`machine/usb` source (not assumed): it hardcodes a **maximum of 3 USB
+interfaces total** (a fixed-size array, not a slice), so a USB CDC debug
+console (2 interfaces) plus USBTMC (1) exactly fills the budget, with no
+room left for anything else on this port. Its outgoing-transfer path does
+not itself split a payload larger than one packet across multiple
+packets — that's what `usbep.ChunkSender` and `cmd/firmware`'s
+`TxHandler` callback do, deliberately, rather than being handled for free
+by the framework.
 
 `usbtmcfront`'s stated scope, deliberately not (yet) covered:
 
