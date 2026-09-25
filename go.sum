@@ -1,2 +1,4 @@
 github.com/tridentsx/hislip v0.0.0-20260924231716-819d5e59c761 h1:iAoBKqGChCmcXcMza0BkNMsN9gWr75JNkR/VrroVRNs=
 github.com/tridentsx/hislip v0.0.0-20260924231716-819d5e59c761/go.mod h1:F7jt5xomG9lTKBE5vTysKLrZyPaFcTSxalmY51y2/bA=
+github.com/tridentsx/usbtmc v0.15.2-0.20260925045406-b7c86a69fe58 h1:9j/yAIxx9dWEepJ+XC8vWGvJ8R8iPi3ub9uow/yiS9I=
+github.com/tridentsx/usbtmc v0.15.2-0.20260925045406-b7c86a69fe58/go.mod h1:ce2g0ItFb682yarBAn2HFEv8Va4rHxR2EVmCQV8Ek7k=

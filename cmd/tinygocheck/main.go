@@ -4,10 +4,11 @@
 // package to have name main" -- see the identical situation and comment in
 // github.com/tridentsx/hislip's own cmd/tinygocheck).
 //
-// This exercises the real dependency graph of gpib and hislipfront --
-// which in turn pulls in hislip/server and hislip/protocol -- for an
-// actual embedded target, with a minimal stub Instrument. It does nothing
-// real and is not firmware.
+// This exercises the real dependency graph of gpib, hislipfront (which in
+// turn pulls in hislip/server and hislip/protocol), and usbtmcfront (which
+// pulls in github.com/gotmc/usbtmc/wire) for an actual embedded target,
+// with a minimal stub Instrument. It does nothing real and is not
+// firmware.
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 	"github.com/tridentsx/hislip/server"
 	"github.com/tridentsx/tmc-gateway/gpib"
 	"github.com/tridentsx/tmc-gateway/hislipfront"
+	"github.com/tridentsx/tmc-gateway/usbtmcfront"
 )
 
 type stubInstrument struct{}
@@ -38,6 +40,12 @@ func main() {
 	if _, err := server.New(dev, server.Config{}); err != nil {
 		panic(err)
 	}
+
+	h := &usbtmcfront.Handler{Instrument: stubInstrument{}}
+	if _, err := h.HandleBulkOut(context.Background(), []byte{1, 1, 0xfe, 0, 0, 0, 0, 0, 1, 0, 0, 0}); err != nil {
+		panic(err)
+	}
+
 	for {
 	}
 }
