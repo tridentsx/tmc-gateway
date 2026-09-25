@@ -57,9 +57,12 @@ PCB has all 93 footprints placed but is **not yet routed**.
 ## Software
 
 ```text
-gpib/          the Instrument abstraction every front end drives (no
-                firmware, no bus driver -- just the interface)
-hislipfront/    adapts gpib.Instrument to tridentsx/hislip's server.Device
+gpib/           the Instrument abstraction every front end drives (no
+                 firmware, no bus driver -- just the interface)
+hislipfront/     adapts gpib.Instrument to tridentsx/hislip's server.Device
+usbtmcfront/     adapts gpib.Instrument to USBTMC/USB488 Bulk-OUT messages
+cmd/tinygocheck/ not firmware -- exists so `just tinygo` has a real main
+                 package to build and link, exercising the above for real
 ```
 
 `gpib.Instrument` is deliberately not a copy of `hislip/server.Device`,
@@ -77,23 +80,30 @@ actually received.
 |---|---|
 | `gpib.Instrument` abstraction | Defined |
 | `hislipfront` (HiSLIP → `gpib.Instrument`) | Implemented, unit-tested |
-| USBTMC/USB488 front end | Not started — blocked on device-side wire codec (below) |
+| `usbtmcfront` (USBTMC/USB488 → `gpib.Instrument`) | Core Bulk-OUT dispatch implemented, unit-tested — see scope below |
 | GPIB bus driver (the concrete `gpib.Instrument`) | Not started |
 | Raw SCPI front end | Not started |
-| TinyGo build verification | Not done — TinyGo isn't installed anywhere this has been built yet |
+| TinyGo build verification | **Done for real**: `tinygo build -target=pico2` (0.42.0) produces a real linked ARM ELF from `cmd/tinygocheck`, exercising `gpib`, `hislipfront`, and `usbtmcfront` together — not yet run on real hardware |
 
-Two real, non-mechanical pieces of protocol work are still open before the
-USB side or the bus driver can start:
+`usbtmcfront`'s stated scope, deliberately not (yet) covered:
 
-- **Device-side USBTMC wire codec.** [tridentsx/usbtmc][usbtmc]'s new
-  `wire` subpackage only has the *client* direction: encoding Bulk-OUT
-  headers, decoding Bulk-IN responses. A device needs the mirror image
-  (decode Bulk-OUT, encode a `DevDepMsgIn` Bulk-IN response), which exists
-  in no form yet, private or exported.
-- **The real IEEE-488.1 three-wire handshake and ATN-based addressing**,
-  needed by the bus driver. Nothing here has been verified against real
-  GPIB hardware yet; treat any bus-timing claim in this repo's history as
-  reasoned from the spec text, not measured.
+- Works on one already-reassembled logical USBTMC message, not raw USB
+  transfers — splitting a message across several USB packets and the
+  alignment padding USBTMC requires between messages is a transport-framing
+  concern for whatever wires it to a real USB endpoint later, the same
+  split `hislip/server`'s `Stream` abstraction makes.
+- TermChar-based early read termination is decoded but ignored.
+- Every control-transfer-based USBTMC/USB488 request — `GET_CAPABILITIES`,
+  `INITIATE_CLEAR`, `READ_STATUS_BYTE`, `REN_CONTROL`, `GO_TO_LOCAL`,
+  `LOCAL_LOCKOUT`, the abort requests — is not implemented at all; only the
+  three Bulk-OUT message types (`DevDepMsgOut`, `RequestDevDepMsgIn`,
+  `Trigger`) are.
+
+One real, non-mechanical piece of protocol work is still open before the
+bus driver can start: **the real IEEE-488.1 three-wire handshake and
+ATN-based addressing.** Nothing here has been verified against real GPIB
+hardware yet; treat any bus-timing claim in this repo's history as reasoned
+from the spec text, not measured.
 
 ## Related repositories
 
