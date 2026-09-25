@@ -15,6 +15,10 @@ unit: check
 tinygo:
   tinygo build -target=pico2 -o /tmp/tmc-gateway-tinygocheck.elf ./cmd/tinygocheck
 
+# Build the real (skeleton) firmware as a flashable UF2. Requires tinygo.
+firmware:
+  tinygo build -target=pico2 -o /tmp/tmc-gateway-firmware.uf2 ./cmd/firmware
+
 # go mod tidy + verify.
 tidy:
   go mod tidy
