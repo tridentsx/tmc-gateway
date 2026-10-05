@@ -16,8 +16,21 @@ tinygo:
   tinygo build -target=pico2 -o /tmp/tmc-gateway-tinygocheck.elf ./cmd/tinygocheck
 
 # Build the real (skeleton) firmware as a flashable UF2. Requires tinygo.
+# Bakes the git commit (+ "-dirty" if uncommitted changes exist) and a UTC
+# build timestamp into cmd/firmware's firmwareVersion var, so the "version"
+# debug-console command (or the boot line) can tell exactly which build is
+# running on a given board -- see cmd/firmware/debug.go.
 firmware:
-  tinygo build -target=pico2 -o /tmp/tmc-gateway-firmware.uf2 ./cmd/firmware
+  #!/usr/bin/env bash
+  set -euo pipefail
+  commit=$(git rev-parse --short HEAD)
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    commit="${commit}-dirty"
+  fi
+  built=$(date -u +%Y%m%dT%H%M%SZ)
+  tinygo build -target=pico2 \
+    -ldflags "-X main.firmwareVersion=${commit}-${built}" \
+    -o /tmp/tmc-gateway-firmware.uf2 ./cmd/firmware
 
 # go mod tidy + verify.
 tidy:

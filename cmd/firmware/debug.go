@@ -4,6 +4,17 @@ package main
 
 import "machine"
 
+// firmwareVersion identifies exactly which build is running -- the git
+// commit and build time, baked in by the Justfile's firmware recipe via
+// `tinygo build -ldflags "-X main.firmwareVersion=..."` (tinygo accepts
+// go-link-compatible -ldflags; confirmed with `tinygo build --help`).
+// Left at this default if built any other way (e.g. `tinygo build
+// ./cmd/firmware` directly, bypassing the Justfile), which is itself a
+// useful signal during real-hardware debugging: "dev-unknown" means
+// whoever flashed it didn't use `just firmware`, so don't trust it to
+// match any particular commit.
+var firmwareVersion = "dev-unknown"
+
 // firmwareStats are plain counters: some incremented from USB interrupt
 // context (usbtmcRxHandler, usbtmcTxHandler, sendPacket), some from the
 // main loop (processPacket). Only ever read/printed from the main loop.
@@ -81,7 +92,9 @@ func pollDebugConsole() {
 func runCommand(cmd []byte) {
 	switch string(cmd) {
 	case "help":
-		println("commands: help stats last clear uptime ping")
+		println("commands: help version stats last clear uptime ping")
+	case "version":
+		println("firmware_version =", firmwareVersion)
 	case "stats":
 		printStats()
 	case "last":

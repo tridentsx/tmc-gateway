@@ -145,7 +145,7 @@ func main() {
 	// no-op stubs, silently breaking the console and println's output
 	// along with it. Only USBTMC's own descriptor and endpoints need
 	// registering here.
-	println("firmware: boot")
+	println("firmware: boot, version =", firmwareVersion)
 
 	machine.ConfigureUSBEndpoint(
 		usbtmcDescriptor,
