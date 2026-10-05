@@ -16,7 +16,10 @@
 // a tiny single-producer/single-consumer ring (logEvent); the main loop,
 // running in ordinary (non-interrupt) context, drains and prints them,
 // and also prints a heartbeat so a frozen device is distinguishable from
-// one that is merely idle.
+// one that is merely idle. See debug.go for the interactive CDC console
+// (type "help" into the serial port) and the persistent counters it
+// reports -- built so a future real-hardware debugging session has more
+// to go on than this one started with.
 package main
 
 import (
@@ -124,6 +127,9 @@ var (
 )
 
 func logEvent(code byte, val int) {
+	if evHead-evTail >= uint32(len(events)) {
+		stats.evOverflows++
+	}
 	events[evHead%uint32(len(events))] = event{code, val}
 	evHead++
 }
@@ -160,7 +166,12 @@ func main() {
 		nil, // no control-transfer handler for interface 2 yet -- see usbtmcfront's stated scope.
 	)
 
-	var heartbeat uint32
+	// Polled every tick (100ms) rather than once a second: the debug
+	// console (pollDebugConsole) should feel responsive, not lag behind
+	// a 1s heartbeat cadence. The heartbeat itself still only prints
+	// once every heartbeatTicks ticks.
+	const heartbeatTicks = 10
+	var tick uint32
 	for {
 		for rxTail != rxHead {
 			idx := rxTail % rxRingSize
@@ -172,9 +183,13 @@ func main() {
 			evTail++
 			printEvent(e)
 		}
-		heartbeat++
-		println("heartbeat", heartbeat)
-		time.Sleep(1 * time.Second)
+		pollDebugConsole()
+		tick++
+		if tick%heartbeatTicks == 0 {
+			uptimeSeconds++
+			println("heartbeat", uptimeSeconds)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -185,14 +200,18 @@ func main() {
 func processPacket(packet []byte) {
 	msg, ready := reasm.Feed(packet)
 	if !ready {
+		stats.rxNotReady++
 		logEvent(evNotReady, 0)
 		return
 	}
+	stats.msgsReady++
+	lastMsgLen = copy(lastMsg[:], msg)
 	logEvent(evReady, len(msg))
 	owned := append([]byte(nil), msg...)
 
 	resp, err := handler.HandleBulkOut(context.Background(), owned)
 	if err != nil {
+		stats.handleErrors++
 		logEvent(evHandleErr, 0)
 		// No error-reporting path back to the host exists yet (that
 		// needs USBTMC's abort/status control requests, which
@@ -201,9 +220,12 @@ func processPacket(packet []byte) {
 		return
 	}
 	if resp == nil {
+		stats.nilResponses++
 		logEvent(evNilResp, 0)
 		return // DevDepMsgOut, Trigger: no response message.
 	}
+	stats.responsesSent++
+	lastRespLen = copy(lastResp[:], resp)
 	logEvent(evSending, len(resp))
 	startSend(resp)
 }
@@ -239,6 +261,10 @@ func printEvent(e event) {
 // loop to actually reassemble and dispatch -- see rxRing's own doc
 // comment for why nothing else is safe to do here.
 func usbtmcRxHandler(packet []byte) {
+	stats.rxPackets++
+	if rxHead-rxTail >= rxRingSize {
+		stats.rxOverflows++
+	}
 	logEvent(evRx, len(packet))
 	idx := rxHead % rxRingSize
 	rxRing[idx].len = copy(rxRing[idx].buf[:], packet)
@@ -251,6 +277,7 @@ func usbtmcRxHandler(packet []byte) {
 // message longer than one packet; see usbep.ChunkSender's own doc
 // comment. Also USB interrupt context; see usbtmcRxHandler's doc comment.
 func usbtmcTxHandler() {
+	stats.txFired++
 	logEvent(evTxFired, 0)
 	if !txPending {
 		return
@@ -258,16 +285,30 @@ func usbtmcTxHandler() {
 	packet, ok := sender.Next()
 	if !ok {
 		txPending = false
+		stats.txDone++
 		logEvent(evTxDone, 0)
 		return
 	}
-	machine.SendUSBInPacket(usbtmcHardwareEndpoint, packet)
+	sendPacket(packet)
 }
 
 func startSend(data []byte) {
 	txPending = true
-	ok := machine.SendUSBInPacket(usbtmcHardwareEndpoint, sender.Start(data))
+	ok := sendPacket(sender.Start(data))
 	logEvent(evSendStart, boolToInt(ok))
+}
+
+// sendPacket is the one place that actually calls machine.SendUSBInPacket
+// for USBTMC's bulk-IN endpoint, so txPacketsSent/txSendFailures account
+// for every send regardless of whether it came from startSend (the first
+// packet of a response) or usbtmcTxHandler (every packet after that).
+func sendPacket(packet []byte) bool {
+	ok := machine.SendUSBInPacket(usbtmcHardwareEndpoint, packet)
+	stats.txPacketsSent++
+	if !ok {
+		stats.txSendFailures++
+	}
+	return ok
 }
 
 func boolToInt(b bool) int {

@@ -154,6 +154,15 @@ for it:
      event log and a heartbeat print, giving an unambiguous liveness signal
      during this kind of debugging.
 
+Built for the *next* real-hardware session, not just this one:
+`cmd/firmware`'s CDC console is now interactive (`help`/`stats`/`last`/
+`clear`/`uptime`/`ping`), backed by persistent counters (packets in,
+messages reassembled, responses sent, ring overflows, TX failures) and a
+bounded hex dump of the last message/response — confirmed working on
+real hardware, including the counters incrementing correctly across a
+real bulk transfer and `last` showing the exact bytes exchanged. See
+`cmd/firmware/debug.go`.
+
 ## Related repositories
 
 - [tridentsx/hislip][hislip] — the HiSLIP protocol/server/client library
