@@ -88,7 +88,7 @@ actually received.
 | `hislipfront` (HiSLIP → `gpib.Instrument`) | Implemented, unit-tested |
 | `usbtmcfront` (USBTMC/USB488 → `gpib.Instrument`) | Core Bulk-OUT dispatch implemented, unit-tested — see scope below |
 | `usbep` (USB packet reassembly/chunking) | Implemented, unit-tested — real edge cases (exact-multiple-of-packet-size, empty message, byte-at-a-time feed) |
-| `cmd/firmware` (real USB descriptor + endpoint wiring) | Skeleton exists and **actually builds**: `tinygo build -target=pico2` produces a real, well-formed flashable UF2. Backed by a stub `gpib.Instrument` — no real GPIB bus driver yet. **Not run on any real hardware or against a real USB host.** |
+| `cmd/firmware` (real USB descriptor + endpoint wiring) | Skeleton exists and **actually builds**: `tinygo build -target=pico2` produces a real, well-formed flashable UF2. Backed by a stub `gpib.Instrument` — no real GPIB bus driver yet. **Verified on real hardware** (a W5500-EVB-Pico2, RP2350): descriptor enumerates exactly as designed, and a real USBTMC `RequestDevDepMsgIn` round trip over EP3 OUT/IN produces a correctly encoded response — see below. |
 | GPIB bus driver (the concrete `gpib.Instrument`) | Not started |
 | Raw SCPI front end | Not started |
 
@@ -121,6 +121,38 @@ bus driver can start: **the real IEEE-488.1 three-wire handshake and
 ATN-based addressing.** Nothing here has been verified against real GPIB
 hardware yet; treat any bus-timing claim in this repo's history as reasoned
 from the spec text, not measured.
+
+### Real-hardware findings (`cmd/firmware`, W5500-EVB-Pico2 / RP2350)
+
+Confirmed by actually flashing and exercising the board, not just building
+for it:
+
+- The composed descriptor (CDC debug console + USBTMC/USB488) enumerates
+  exactly as designed: 3 interfaces, correct classes (CDC `0x02/0x02/0x01`
+  + `0x0A/0x00/0x00`, USBTMC/USB488 `0xFE/0x03/0x01`), correct endpoint
+  addresses (`0x03`/`0x83` for the shared USBTMC bulk endpoint).
+- A real `RequestDevDepMsgIn` Bulk-OUT write followed by a Bulk-IN read,
+  issued from the host with [go-usb][go-usb], round-trips correctly end to
+  end through `usbtmcRxHandler` → `usbep.Reassembler` → `usbtmcfront.Handler`
+  → `usbep.ChunkSender` → `usbtmcTxHandler`.
+- Two real firmware bugs were found and fixed this way, both specific to
+  running inside TinyGo's bare-metal USB interrupt handlers, not to the
+  protocol logic itself:
+  1. `main()` called `machine.EnableCDC` a second time. TinyGo's own
+     runtime (`initUSB`, which runs before `main`) already calls it via
+     `machine/usb/cdc.EnableUSBCDC` with working handlers; the redundant
+     call overwrote them with no-op stubs, silently breaking the debug
+     console.
+  2. `usbtmcRxHandler` called `println`, `reasm.Feed`, `append`, and
+     `usbtmcfront.Handler.HandleBulkOut` directly — all either blocking or
+     allocating — from inside a USB interrupt handler. TinyGo's bare-metal
+     allocator is not interrupt-safe, so this corrupted state the moment a
+     real bulk transfer arrived. The handler now only copies the raw
+     packet into a fixed-size ring with a plain array copy (no allocation,
+     no blocking); reassembly, dispatch, and response encoding all run in
+     the main loop instead, which drains that ring alongside a lightweight
+     event log and a heartbeat print, giving an unambiguous liveness signal
+     during this kind of debugging.
 
 ## Related repositories
 
