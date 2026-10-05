@@ -32,6 +32,12 @@ firmware:
     -ldflags "-X main.firmwareVersion=${commit}-${built}" \
     -o /tmp/tmc-gateway-firmware.uf2 ./cmd/firmware
 
+# Host-side TUI for cmd/firmware's CDC debug console -- a menu of known
+# commands plus a raw-command box, instead of hand-typing into
+# screen/picocom/pyserial. Pass port="/dev/..." to override auto-detect.
+debugconsole port="":
+  go run ./cmd/debugconsole {{ if port != "" { "-port " + port } else { "" } }}
+
 # go mod tidy + verify.
 tidy:
   go mod tidy

@@ -69,6 +69,8 @@ cmd/tinygocheck/  not firmware -- exists so `just tinygo` has a real main
                   package to build and link, exercising gpib/hislipfront/
                   usbtmcfront together under mainline go's dependency
                   graph but a real tinygo build
+cmd/debugconsole/ host-side only (plain go build, no tinygo tag): a
+                  terminal UI for cmd/firmware's CDC debug console
 ```
 
 `gpib.Instrument` is deliberately not a copy of `hislip/server.Device`,
@@ -155,13 +157,24 @@ for it:
      during this kind of debugging.
 
 Built for the *next* real-hardware session, not just this one:
-`cmd/firmware`'s CDC console is now interactive (`help`/`stats`/`last`/
-`clear`/`uptime`/`ping`), backed by persistent counters (packets in,
-messages reassembled, responses sent, ring overflows, TX failures) and a
-bounded hex dump of the last message/response — confirmed working on
-real hardware, including the counters incrementing correctly across a
-real bulk transfer and `last` showing the exact bytes exchanged. See
-`cmd/firmware/debug.go`.
+`cmd/firmware`'s CDC console is now interactive (`help`/`version`/
+`stats`/`last`/`clear`/`uptime`/`ping`), backed by persistent counters
+(packets in, messages reassembled, responses sent, ring overflows, TX
+failures) and a bounded hex dump of the last message/response — confirmed
+working on real hardware, including the counters incrementing correctly
+across a real bulk transfer and `last` showing the exact bytes exchanged.
+See `cmd/firmware/debug.go`. `version` reports the exact git commit (plus
+`-dirty` if built from an uncommitted tree) and build time, baked in by
+`just firmware`'s `-ldflags -X`, so it's possible to confirm which build
+is actually running on a given board.
+
+**`cmd/debugconsole`** is the host-side companion: a terminal UI
+(`go run ./cmd/debugconsole`, or `just debugconsole`) with a menu of the
+commands above plus a free-text box for anything not in that list yet,
+so a real-hardware session doesn't mean hand-typing into `screen`/
+`picocom`/a pyserial script. Plain `go build`, no `tinygo` tag — runs on
+the development machine against an already-flashed, already-connected
+board, never on the RP2350 itself.
 
 ## Related repositories
 
