@@ -2,7 +2,10 @@
 // debug console (see cmd/firmware/debug.go): a menu of the firmware's
 // known commands plus a free-text box for anything not in that list yet,
 // instead of hand-typing commands into screen/picocom/pyserial every
-// time. Runs on the development machine (Mac/Linux/Windows) against an
+// time. Shows an explicit port picker (see picker.go) rather than
+// silently guessing which device to use -- unless -port is given, in
+// which case that port is used directly and the picker is skipped.
+// Runs on the development machine (Mac/Linux/Windows) against an
 // already-flashed, already-connected board -- it has no "tinygo" build
 // tag, imports nothing from machine/*, and is never built for the
 // RP2350. Built after a real debugging session where the lack of
@@ -15,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,18 +25,18 @@ import (
 )
 
 func main() {
-	portFlag := flag.String("port", "", "serial port (default: auto-detect a usbmodem port)")
+	portFlag := flag.String("port", "", "serial port (default: show a picker)")
 	baud := flag.Int("baud", 115200, "baud rate")
 	flag.Parse()
 
 	portName := *portFlag
 	if portName == "" {
-		found, err := autoDetectPort()
+		chosen, err := pickPort()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "debugconsole:", err)
 			os.Exit(1)
 		}
-		portName = found
+		portName = chosen
 	}
 
 	mode := &serial.Mode{BaudRate: *baud}
@@ -64,23 +66,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "debugconsole:", err)
 		os.Exit(1)
 	}
-}
-
-// autoDetectPort picks the first port whose name suggests a USB CDC ACM
-// device (covers macOS's /dev/cu.usbmodem* and Linux's /dev/ttyACM*).
-// Ambiguous with more than one such board connected -- pass -port
-// explicitly in that case.
-func autoDetectPort() (string, error) {
-	ports, err := serial.GetPortsList()
-	if err != nil {
-		return "", fmt.Errorf("listing serial ports: %w", err)
-	}
-	for _, p := range ports {
-		if strings.Contains(p, "usbmodem") || strings.Contains(p, "ttyACM") {
-			return p, nil
-		}
-	}
-	return "", fmt.Errorf("no usbmodem/ttyACM port found among %v -- pass -port explicitly", ports)
 }
 
 // pumpLines reads newline-delimited output from the firmware's CDC
