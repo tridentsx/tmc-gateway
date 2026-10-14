@@ -11,6 +11,44 @@
 #
 # Scoped to POE-vs-non-POE so that normal spacing still applies between the
 # primary-side nets themselves.
+#
+# TWO-TIER, and the reason matters:
+#
+# Inside J2 the isolation barrier is the magjack's own transformer, not the
+# PCB. The HR871150C brings the cable-side centre taps (pins 7-10) out on
+# 2.54 mm pitch alongside the PHY-side MDI pins (1-5), so J2.5 ETH_RXN sits
+# 1.016 mm from J2.7 POE_TAP_A1 by the connector's construction. A 2 mm PCB
+# rule there is unsatisfiable by any layout, and it would also forbid routing
+# the MDI pairs out of the connector at all. Holding the board to 2 mm when
+# the qualified connector achieves 1.016 mm buys no safety margin, because
+# the connector is in parallel with the board and already sets the limit.
+#
+# So: 2 mm everywhere the layout controls the gap, and 1 mm within J2's pin
+# field, which is still no worse than the connector's own spacing. The real
+# barrier -- the plane keep-out under the primary-side copper -- is unaffected
+# and remains mandatory (see .konnect/project.json design rules).
+
 (rule "PoE isolation barrier"
-	(condition "A.NetClass == 'POE' && B.NetClass != 'POE'")
+	(condition "A.NetClass == 'POE' && B.NetClass != 'POE' && !A.memberOfFootprint('J2')")
 	(constraint clearance (min 2mm)))
+
+(rule "PoE isolation barrier at magjack"
+	(condition "A.NetClass == 'POE' && B.NetClass != 'POE' && A.memberOfFootprint('J2')")
+	(constraint clearance (min 1mm)))
+
+# USB-C J3 (TYPE-C-31-M-12) is a dense Type-C footprint. The spacing between
+# its own pads (GND/VBUS/CC/SBU) and their shared solder-mask openings is set
+# by the connector, not by the layout, so intra-connector clearance is not a
+# layout defect. Scope strictly to pad pairs that both belong to J3.
+(rule "J3 USB-C internal clearance"
+	(condition "A.memberOfFootprint('J3') && B.memberOfFootprint('J3')")
+	(constraint clearance (min 0mm)))
+
+# Mechanical / shield plated holes carry no net: the HR871150C (J2) cable-side
+# locating posts, the USB-C (J3) shield posts, and the M3 mounting holes. Their
+# annular ring is a mechanical feature, not a current path. Waive the annular
+# minimum for PLATED, NO-NET holes only, so signal through-hole pins (which
+# have a net) are still fully checked.
+(rule "Mechanical hole annular"
+	(condition "A.isPlated() && A.NetName == ''")
+	(constraint annular_width (min 0mm)))
